@@ -10,6 +10,7 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/CMakeMod
 include(SetPlatformVars)
 
 SET(CPACK_GENERATOR "DEB")
+
 SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "Steven Lovegrove")
 SET(CPACK_PACKAGE_VERSION_MAJOR ${PANGOLIN_VERSION_MAJOR})
 SET(CPACK_PACKAGE_VERSION_MINOR ${PANGOLIN_VERSION_MINOR})
@@ -17,6 +18,7 @@ SET(CPACK_PACKAGE_VERSION_PATCH "0")
 include(CPack)
 
 option( BUILD_EXAMPLES "Build Examples" ON )
+option( BUILD_TESTS "Build Tests" ON )
 
 if(_WIN_)
     option( BUILD_SHARED_LIBS    "Build Shared Library" OFF)
@@ -90,7 +92,10 @@ add_custom_target(uninstall
 
 add_subdirectory("external")
 add_subdirectory("src")
-add_subdirectory("test")
+
+if(BUILD_TESTS)
+  add_subdirectory("test")
+endif()
 
 if(BUILD_EXAMPLES)
   set(Pangolin_DIR ${Pangolin_BINARY_DIR}/src)

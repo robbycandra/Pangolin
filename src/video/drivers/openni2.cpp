@@ -26,11 +26,11 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <pangolin/video/drivers/openni2.h>
 #include <pangolin/factory/factory_registry.h>
+#include <pangolin/video/drivers/openni2.h>
 
-#include <PS1080.h>
 #include <OniVersion.h>
+#include <PS1080.h>
 
 namespace pangolin
 {
@@ -209,7 +209,7 @@ void OpenNi2Video::InitialiseOpenNI()
     numDevices = 0;
     numStreams = 0;
     current_frame_index = 0;
-    total_frames = std::numeric_limits<int>::max();
+    total_frames = std::numeric_limits<size_t>::max();
 
     openni::Status rc = openni::STATUS_OK;
 
@@ -242,7 +242,7 @@ void OpenNi2Video::AddStream(const OpenNiStreamMode& mode)
 
     openni::PlaybackControl* control = device.getPlaybackControl();
     if(control && numStreams==0) {
-        total_frames = std::min(total_frames,control->getNumberOfFrames(stream));
+        total_frames = std::min(total_frames, (size_t)control->getNumberOfFrames(stream));
     }
 
     numStreams++;
@@ -251,17 +251,14 @@ void OpenNi2Video::AddStream(const OpenNiStreamMode& mode)
 void OpenNi2Video::SetupStreamModes()
 {
     streams_properties = &frame_properties["streams"];
-    *streams_properties = json::value(json::array_type,false);
-    streams_properties->get<json::array>().resize(numStreams);
+    *streams_properties = picojson::value(picojson::array_type,false);
+    streams_properties->get<picojson::array>().resize(numStreams);
 
     use_depth = false;
     use_ir = false;
     use_rgb = false;
     depth_to_color = false;
     use_ir_and_rgb = false;
-
-    //    const char* deviceURI = openni::ANY_DEVICE;
-    fromFile = false;//(deviceURI!=NULL);
 
     sizeBytes =0;
     for(size_t i=0; i<numStreams; ++i) {
@@ -324,9 +321,12 @@ void OpenNi2Video::SetupStreamModes()
             throw e;
         }
 
-        openni::Status rc = video_stream[i].setVideoMode(onivmode);
-        if(rc != openni::STATUS_OK)
-            throw VideoException("Couldn't set OpenNI VideoMode", openni::OpenNI::getExtendedError());
+        openni::Status rc;
+        if(!devices[mode.device].isFile()){//trying to setVideoMode on a file results in an OpenNI error
+            rc = video_stream[i].setVideoMode(onivmode);
+            if(rc != openni::STATUS_OK)
+                throw VideoException("Couldn't set OpenNI VideoMode", openni::OpenNI::getExtendedError());
+        }
 
         int outputWidth = onivmode.getResolutionX();
         int outputHeight = onivmode.getResolutionY();
@@ -358,13 +358,13 @@ void OpenNi2Video::SetupStreamModes()
 
 void OpenNi2Video::UpdateProperties()
 {
-    json::value& jsopenni = device_properties["openni"];
+    picojson::value& jsopenni = device_properties["openni"];
 
-    json::value& jsdevices = jsopenni["devices"];
-    jsdevices = json::value(json::array_type,false);
-    jsdevices.get<json::array>().resize(numDevices);
+    picojson::value& jsdevices = jsopenni["devices"];
+    jsdevices = picojson::value(picojson::array_type,false);
+    jsdevices.get<picojson::array>().resize(numDevices);
     for (size_t i=0; i<numDevices; ++i) {
-      json::value& jsdevice = jsdevices[i];
+      picojson::value& jsdevice = jsdevices[i];
 #define SET_PARAM(param_type, param) \
       { \
         param_type val; \
@@ -380,9 +380,9 @@ void OpenNi2Video::UpdateProperties()
 #undef SET_PARAM
     }
 
-    json::value& stream = jsopenni["streams"];
-    stream = json::value(json::array_type,false);
-    stream.get<json::array>().resize(Streams().size());
+    picojson::value& stream = jsopenni["streams"];
+    stream = picojson::value(picojson::array_type,false);
+    stream.get<picojson::array>().resize(Streams().size());
     for(unsigned int i=0; i<Streams().size(); ++i) {
         if(sensor_type[i].sensor_type != OpenNiUnassigned)
         {
@@ -394,7 +394,7 @@ void OpenNi2Video::UpdateProperties()
                 } \
             }
 
-            json::value& jsstream = stream[i];
+            picojson::value& jsstream = stream[i];
             SET_PARAM( unsigned long long, XN_STREAM_PROPERTY_INPUT_FORMAT );
             SET_PARAM( unsigned long long, XN_STREAM_PROPERTY_CROPPING_MODE );
 
@@ -610,17 +610,17 @@ bool OpenNi2Video::GrabNewest( unsigned char* image, bool wait )
     return GrabNext(image,wait);
 }
 
-int OpenNi2Video::GetCurrentFrameId() const
+size_t OpenNi2Video::GetCurrentFrameId() const
 {
     return current_frame_index;
 }
 
-int OpenNi2Video::GetTotalFrames() const
+size_t OpenNi2Video::GetTotalFrames() const
 {
     return total_frames;
 }
 
-int OpenNi2Video::Seek(int frameid)
+size_t OpenNi2Video::Seek(size_t frameid)
 {
     openni::PlaybackControl* control = devices[0].getPlaybackControl();
     if(control) {

@@ -27,8 +27,12 @@
 
 #pragma once
 
+#include <pangolin/log/packetstream_writer.h>
 #include <pangolin/video/video_output.h>
-#include <pangolin/log/oPacketStream.hpp>
+
+#include <pangolin/video/stream_encoder_factory.h>
+
+#include <functional>
 
 namespace pangolin
 {
@@ -36,12 +40,12 @@ namespace pangolin
 class PANGOLIN_EXPORT PangoVideoOutput : public VideoOutputInterface
 {
 public:
-    PangoVideoOutput(const std::string& filename, size_t buffer_size_bytes = 100*1024*1024);
+    PangoVideoOutput(const std::string& filename, size_t buffer_size_bytes, const std::map<size_t, std::string> &stream_encoder_uris);
     ~PangoVideoOutput();
 
     const std::vector<StreamInfo>& Streams() const override;
-    void SetStreams(const std::vector<StreamInfo>& streams, const std::string& uri, const json::value& device_properties) override;
-    int WriteStreams(const unsigned char* data, const json::value& frame_properties) override;
+    void SetStreams(const std::vector<StreamInfo>& streams, const std::string& uri, const picojson::value& device_properties) override;
+    int WriteStreams(const unsigned char* data, const picojson::value& frame_properties) override;
     bool IsPipe() const override;
 
 protected:
@@ -50,13 +54,17 @@ protected:
     std::vector<StreamInfo> streams;
     std::string input_uri;
     const std::string filename;
-    json::value device_properties;
+    picojson::value device_properties;
 
-    oPacketStream packetstream;
+    PacketStreamWriter packetstream;
     size_t packetstream_buffer_size_bytes;
     int packetstreamsrcid;
     size_t total_frame_size;
     bool is_pipe;
+
+    bool fixed_size;
+    std::map<size_t, std::string> stream_encoder_uris;
+    std::vector<ImageEncoderFunc> stream_encoders;
 };
 
 }

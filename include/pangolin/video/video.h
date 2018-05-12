@@ -115,10 +115,10 @@
 //  e.g. "test://"
 //  e.g. "test:[size=640x480,fmt=RGB24]//"
 
+#include <pangolin/utils/uri.h>
+#include <pangolin/video/video_exception.h>
 #include <pangolin/video/video_interface.h>
 #include <pangolin/video/video_output_interface.h>
-#include <pangolin/video/video_exception.h>
-#include <pangolin/utils/uri.h>
 
 namespace pangolin
 {
@@ -179,7 +179,7 @@ T* FindFirstMatchingVideoInterface( VideoInterface& video )
 }
 
 inline
-json::value GetVideoFrameProperties(VideoInterface* video)
+picojson::value GetVideoFrameProperties(VideoInterface* video)
 {
     VideoPropertiesInterface* pi = dynamic_cast<VideoPropertiesInterface*>(video);
     VideoFilterInterface* fi = dynamic_cast<VideoFilterInterface*>(video);
@@ -190,20 +190,34 @@ json::value GetVideoFrameProperties(VideoInterface* video)
         if(fi->InputStreams().size() == 1) {
             return GetVideoFrameProperties(fi->InputStreams()[0]);
         }else if(fi->InputStreams().size() > 0){
-            // Use first stream's properties as base, but also populate children.
-            json::value json = GetVideoFrameProperties(fi->InputStreams()[0]);
-            json::value& streams = json["streams"];
+            picojson::value streams;
+
             for(size_t i=0; i< fi->InputStreams().size(); ++i) {
-                streams.push_back( GetVideoFrameProperties(fi->InputStreams()[i]) );
+                const picojson::value dev_props = GetVideoFrameProperties(fi->InputStreams()[i]);
+                if(dev_props.contains("streams")) {
+                    const picojson::value& dev_streams = dev_props["streams"];
+                    for(size_t i=0; i < dev_streams.size(); ++i) {
+                        streams.push_back(dev_streams[i]);
+                    }
+                }else{
+                    streams.push_back(dev_props);
+                }
             }
-            return json;
+
+            if(streams.size() > 1) {
+                picojson::value json = streams[0];
+                json["streams"] = streams;
+                return json;
+            }else{
+                return streams[0];
+            }
         }
     }
-    return json::value();
+    return picojson::value();
 }
 
 inline
-json::value GetVideoDeviceProperties(VideoInterface* video)
+picojson::value GetVideoDeviceProperties(VideoInterface* video)
 {
     VideoPropertiesInterface* pi = dynamic_cast<VideoPropertiesInterface*>(video);
     VideoFilterInterface* fi = dynamic_cast<VideoFilterInterface*>(video);
@@ -214,16 +228,30 @@ json::value GetVideoDeviceProperties(VideoInterface* video)
         if(fi->InputStreams().size() == 1) {
             return GetVideoDeviceProperties(fi->InputStreams()[0]);
         }else if(fi->InputStreams().size() > 0){
-            // Use first stream's properties as base, but also populate children.
-            json::value json = GetVideoDeviceProperties(fi->InputStreams()[0]);
-            json::value& streams = json["streams"];
+            picojson::value streams;
+
             for(size_t i=0; i< fi->InputStreams().size(); ++i) {
-                streams.push_back( GetVideoDeviceProperties(fi->InputStreams()[i]) );
+                const picojson::value dev_props = GetVideoDeviceProperties(fi->InputStreams()[i]);
+                if(dev_props.contains("streams")) {
+                    const picojson::value& dev_streams = dev_props["streams"];
+                    for(size_t i=0; i < dev_streams.size(); ++i) {
+                        streams.push_back(dev_streams[i]);
+                    }
+                }else{
+                    streams.push_back(dev_props);
+                }
             }
-            return json;
+
+            if(streams.size() > 1) {
+                picojson::value json = streams[0];
+                json["streams"] = streams;
+                return json;
+            }else{
+                return streams[0];
+            }
         }
     }
-    return json::value();
+    return picojson::value();
 }
 
 }

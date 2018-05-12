@@ -25,10 +25,10 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
-#include <pangolin/video/drivers/teli.h>
-#include <pangolin/factory/factory_registry.h>
-#include <pangolin/video/iostream_operators.h>
 #include <XmlFeatures.h>
+#include <pangolin/factory/factory_registry.h>
+#include <pangolin/video/drivers/teli.h>
+#include <pangolin/video/iostream_operators.h>
 
 namespace pangolin
 {
@@ -217,7 +217,7 @@ void SetNodeValStr(Teli::CAM_HANDLE cam, Teli::CAM_NODE_HANDLE node, std::string
 }
 
 TeliVideo::TeliVideo(const Params& p)
-	: cam(0), strm(0), hStrmCmpEvt(0)
+    : cam(0), strm(0), hStrmCmpEvt(0), transfer_bandwidth_gbps(0), exposure_us(0)
 {
     TeliSystem::Instance();
 
@@ -272,7 +272,7 @@ TeliVideo::TeliVideo(const Params& p)
         );
     }
     if (uiStatus != Teli::CAM_API_STS_SUCCESS)
-        throw pangolin::VideoException("TeliSDK: Error opening camera");
+        throw pangolin::VideoException(FormatString("TeliSDK: Error opening camera, sn='%'", sn));
 
     SetDeviceParams(device_params);
     Initialise();
@@ -283,7 +283,11 @@ std::string TeliVideo::GetParameter(const std::string& name)
     Teli::CAM_NODE_HANDLE node;
     Teli::CAM_API_STATUS st = Teli::Nd_GetNode(cam, name.c_str(), &node);
     if( st == Teli::CAM_API_STS_SUCCESS) {
-        return GetNodeValStr(cam, node, name);
+        std::string value = GetNodeValStr(cam, node, name);
+        if(name == "ExposureTime") {
+            exposure_us = std::atoi(value.c_str());
+        }
+        return value;
     }else{
         throw std::runtime_error("TeliSDK: Unable to get reference to node:" + name);
     }
@@ -295,6 +299,9 @@ void TeliVideo::SetParameter(const std::string& name, const std::string& value)
     Teli::CAM_API_STATUS st = Teli::Nd_GetNode(cam, name.c_str(), &node);
     if( st == Teli::CAM_API_STS_SUCCESS) {
         SetNodeValStr(cam, node, name, value);
+        if(name == "ExposureTime") {
+            exposure_us = atoi(value.c_str());
+        }
     }else{
         throw std::runtime_error("TeliSDK: Unable to get reference to node:" + name);
     }
@@ -371,6 +378,9 @@ void TeliVideo::Initialise()
     }
 
     InitPangoDeviceProperties();
+
+    // force initialization of local parameters copy.
+    GetParameter("ExposureTime");
 }
 
 void TeliVideo::InitPangoDeviceProperties()
@@ -385,6 +395,7 @@ void TeliVideo::InitPangoDeviceProperties()
     device_properties["ModelName"] = std::string(info.szModelName);
     device_properties["ManufacturerInfo"] = std::string(info.sU3vCamInfo.szManufacturerInfo);
     device_properties["Version"] = std::string(info.sU3vCamInfo.szDeviceVersion);
+    device_properties[PANGO_HAS_TIMING_DATA] = true;
 
     // TODO: Enumerate other settings.
 }
@@ -392,6 +403,9 @@ void TeliVideo::InitPangoDeviceProperties()
 void TeliVideo::SetDeviceParams(const Params& p)
 {
     for(Params::ParamMap::const_iterator it = p.params.begin(); it != p.params.end(); it++) {
+        if(it->first == "transfer_bandwidth_gbps") {
+            transfer_bandwidth_gbps = atof(it->second.c_str());
+        } else {
         try{
             if (it->second == "Execute") {
                 //
@@ -401,6 +415,7 @@ void TeliVideo::SetDeviceParams(const Params& p)
             }
         }catch(std::exception& e) {
             std::cerr << e.what() << std::endl;
+        }
         }
     }
 }
@@ -444,7 +459,14 @@ const std::vector<StreamInfo>& TeliVideo::Streams() const
     return streams;
 }
 
-//! Implement VideoInput::GrabNext()
+void TeliVideo::PopulateEstimatedCenterCaptureTime(basetime host_reception_time)
+{
+    if(transfer_bandwidth_gbps) {
+        const float transfer_time_us = size_bytes / int64_t((transfer_bandwidth_gbps * 1E3) / 8.0);
+        frame_properties[PANGO_ESTIMATED_CENTER_CAPTURE_TIME_US] = picojson::value(int64_t(pangolin::Time_us(host_reception_time) -  (exposure_us/2.0) - transfer_time_us));
+    }
+}
+
 bool TeliVideo::GrabNext(unsigned char* image, bool /*wait*/)
 {
 #ifdef _WIN_
@@ -458,8 +480,11 @@ bool TeliVideo::GrabNext(unsigned char* image, bool /*wait*/)
         Teli::CAM_IMAGE_INFO sImageInfo;
         uint32_t uiPyldSize = (uint32_t)size_bytes;
         Teli::CAM_API_STATUS uiStatus = Teli::Strm_ReadCurrentImage(strm, image, &uiPyldSize, &sImageInfo);
-        frame_properties[PANGO_CAPTURE_TIME_US] = json::value(sImageInfo.ullTimestamp/1000);
-        frame_properties[PANGO_HOST_RECEPTION_TIME_US] = json::value(pangolin::Time_us(pangolin::TimeNow()));
+        frame_properties[PANGO_EXPOSURE_US] = picojson::value(exposure_us);
+        frame_properties[PANGO_CAPTURE_TIME_US] = picojson::value(sImageInfo.ullTimestamp/1000);
+        basetime now = pangolin::TimeNow();
+        frame_properties[PANGO_HOST_RECEPTION_TIME_US] = picojson::value(pangolin::Time_us(now));
+        PopulateEstimatedCenterCaptureTime(now);
         return (uiStatus == Teli::CAM_API_STS_SUCCESS);
     }
 
@@ -506,13 +531,13 @@ bool TeliVideo::DropNFrames(uint32_t n)
 }
 
 //! Access JSON properties of device
-const json::value& TeliVideo::DeviceProperties() const
+const picojson::value& TeliVideo::DeviceProperties() const
 {
         return device_properties;
 }
 
 //! Access JSON properties of most recently captured frame
-const json::value& TeliVideo::FrameProperties() const
+const picojson::value& TeliVideo::FrameProperties() const
 {
     return frame_properties;
 }

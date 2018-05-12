@@ -252,6 +252,14 @@ inline void GlTexture::Download(TypedImage& image) const
         image.Reinitialise(width, height, PixelFormatFromString("RGBA32"));
         Download(image.ptr, GL_RGBA, GL_UNSIGNED_BYTE);
         break;
+    case GL_RGB16:
+        image.Reinitialise(width, height, PixelFormatFromString("RGB48"));
+        Download(image.ptr, GL_RGB, GL_UNSIGNED_SHORT);
+        break;
+    case GL_RGBA16:
+        image.Reinitialise(width, height, PixelFormatFromString("RGBA64"));
+        Download(image.ptr, GL_RGBA, GL_UNSIGNED_SHORT);
+        break;
     case GL_LUMINANCE:
     case GL_LUMINANCE32F_ARB:
         image.Reinitialise(width, height, PixelFormatFromString("GRAY32F"));
@@ -633,6 +641,11 @@ inline void GlBuffer::Reinitialise(GlBufferType buffer_type, GLuint num_elements
     Bind();
     glBufferData(buffer_type, num_elements*GlDataTypeBytes(datatype)*count_per_element, 0, gluse);
     Unbind();
+}
+
+inline void GlBuffer::Reinitialise(GlBuffer const& other )
+{
+    Reinitialise(other.buffer_type, other.num_elements, other.datatype, other.count_per_element, other.gluse);
 }
 
 inline void GlBuffer::Resize(GLuint new_num_elements)

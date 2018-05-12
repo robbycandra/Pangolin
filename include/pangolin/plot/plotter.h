@@ -28,11 +28,13 @@
 #ifndef PLOTTER_H
 #define PLOTTER_H
 
-#include <pangolin/gl/gl.h>
-#include <pangolin/gl/glsl.h>
-#include <pangolin/gl/colour.h>
-#include <pangolin/gl/glfont.h>
+#include <limits>
+
 #include <pangolin/display/view.h>
+#include <pangolin/gl/colour.h>
+#include <pangolin/gl/gl.h>
+#include <pangolin/gl/glfont.h>
+#include <pangolin/gl/glsl.h>
 #include <pangolin/handler/handler.h>
 #include <pangolin/plot/datalog.h>
 #include <pangolin/plot/range.h>
@@ -45,8 +47,9 @@ namespace pangolin
 enum DrawingMode
 {
     DrawingModePoints = GL_POINTS,
-    DrawingModeLine = GL_LINE_STRIP,
     DrawingModeDashed = GL_LINES,
+    DrawingModeLine = GL_LINE_STRIP,
+    DrawingModeNone,
 };
 
 struct Marker
@@ -159,6 +162,8 @@ public:
         DrawingMode drawing_mode = DrawingModeLine, Colour colour = Colour::Unspecified(),
         const std::string &title = "$y", DataLog* log = nullptr
     );
+
+    std::string PlotTitleFromExpr(const std::string& expr) const;
 
     /// Remove all current markers
     void ClearMarkers();

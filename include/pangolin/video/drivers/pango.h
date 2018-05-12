@@ -27,8 +27,10 @@
 
 #pragma once
 
+#include <pangolin/log/packetstream_reader.h>
+#include <pangolin/log/playback_session.h>
+#include <pangolin/video/stream_encoder_factory.h>
 #include <pangolin/video/video.h>
-#include <pangolin/log/iPacketStream.hpp>
 
 namespace pangolin
 {
@@ -37,7 +39,7 @@ class PANGOLIN_EXPORT PangoVideo
     : public VideoInterface, public VideoPropertiesInterface, public VideoPlaybackInterface
 {
 public:
-    PangoVideo(const std::string& filename, bool realtime = true);
+    PangoVideo(const std::string& filename, std::shared_ptr<PlaybackSession> playback_session);
     ~PangoVideo();
 
     // Implement VideoInterface
@@ -55,39 +57,45 @@ public:
     bool GrabNewest( unsigned char* image, bool wait = true ) override;
 
     // Implement VideoPropertiesInterface
+    const picojson::value& DeviceProperties() const override {
+        if (-1 == _src_id) throw std::runtime_error("Not initialised");
+        return _device_properties;
+    }
 
-    const json::value& DeviceProperties() const override {if (-1 == _src_id) throw std::runtime_error("Not initialised"); return _device_properties;};
-
-    const json::value& FrameProperties() const override {return _frame_properties;};
-
+    const picojson::value& FrameProperties() const override {
+        return _frame_properties;
+    }
 
     // Implement VideoPlaybackInterface
 
-    int GetCurrentFrameId() const override;
+    size_t GetCurrentFrameId() const override;
 
-    int GetTotalFrames() const override;
+    size_t GetTotalFrames() const override;
 
-    int Seek(int frameid) override;
+    size_t Seek(size_t frameid) override;
 
 private:
     void HandlePipeClosed();
 
 protected:
-    int FindSource();
+    int FindPacketStreamSource();
+    void SetupStreams(const PacketStreamSource& src);
 
-    iPacketStream _reader;
-    SyncTime _realtime_sync;
+    const std::string _filename;
+    std::shared_ptr<PlaybackSession> _playback_session;
+    std::shared_ptr<PacketStreamReader> _reader;
+    SyncTimeEventPromise _event_promise;
+    int _src_id;
+    const PacketStreamSource* _source;
 
     size_t _size_bytes;
+    bool _fixed_size;
     std::vector<StreamInfo> _streams;
-    json::value _device_properties;
-    json::value _frame_properties;
-    int _src_id;
-    const std::string _filename;
-    bool _realtime;
-    bool _is_pipe;
-    bool _is_pipe_open;
-    int _pipe_fd;
+    std::vector<ImageDecoderFunc> stream_decoder;
+    picojson::value _device_properties;
+    picojson::value _frame_properties;
+
+    Registration<size_t> session_seek;
 };
 
 }
